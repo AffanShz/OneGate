@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
-import '../core/crypto_utils.dart';
-import '../widgets/glass_card.dart';
+import '../services/storage_service.dart';
+import '../services/encryption_service.dart';
 import '../widgets/glass_text_field.dart';
-import '../widgets/glass_button.dart';
-import '../models/note.dart';
-import 'package:uuid/uuid.dart';
 
 class AddNoteScreen extends StatefulWidget {
-  const AddNoteScreen({Key? key}) : super(key: key);
+  final String secretKey;
+  const AddNoteScreen({Key? key, required this.secretKey}) : super(key: key);
 
   @override
   State<AddNoteScreen> createState() => _AddNoteScreenState();
@@ -17,31 +15,37 @@ class AddNoteScreen extends StatefulWidget {
 class _AddNoteScreenState extends State<AddNoteScreen> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  bool _isAes = true;
+  final StorageService _storageService = StorageService();
+  bool _isLoading = false;
 
-  void _saveNote() {
+  Future<void> _saveNote() async {
     if (_titleController.text.isEmpty || _contentController.text.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
       return;
     }
 
-    final rawContent = _contentController.text;
-    final encrypted = _isAes
-        ? CryptoUtils.encryptAES(rawContent)
-        : CryptoUtils.classicModifiedPlayfair(rawContent);
+    setState(() => _isLoading = true);
 
-    final newNote = Note(
-      id: const Uuid()
-          .v4(), // Uuid package not added, let's just use DateTime for now or random
-      title: _titleController.text,
-      encryptedContent: encrypted,
-      timestamp: DateTime.now(),
-      isAes: _isAes,
-    );
+    try {
+      final fullText = "${_titleController.text}\n\n${_contentController.text}";
+      final encryptedData =
+          EncryptionService.encryptData(fullText, widget.secretKey);
 
-    Navigator.pop(context, newNote);
+      await _storageService.createNote(
+        combinedEncryptedData: encryptedData,
+        hmac: "hmac-placeholder",
+        cipherMeta: {"algo": "vigenere+aes"},
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error saving: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -49,104 +53,33 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
     return Scaffold(
       backgroundColor: AppColors.porcelain,
       appBar: AppBar(
+        title: const Text("New Note"),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: BackButton(color: AppColors.shadowGrey),
-        title: Text("Add Note", style: AppTextStyles.heading),
-      ),
-      body: Stack(
-        children: [
-          Positioned(
-            bottom: -100,
-            left: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppColors.brightTealBlue.withOpacity(0.1),
-                    Colors.transparent,
-                  ],
+        actions: [
+          _isLoading
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator())
+              : IconButton(
+                  icon: const Icon(Icons.check),
+                  onPressed: _saveNote,
                 ),
-              ),
-            ),
-          ),
-
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                GlassTextField(hintText: "Title", controller: _titleController),
-                const SizedBox(height: 16),
-                GlassTextField(
-                  hintText: "Write your secure note...",
-                  controller: _contentController,
-                  maxLines: 8,
-                ),
-                const SizedBox(height: 24),
-
-                GlassCard(
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildCipherOption("Modern (AES-256)", true),
-                      _buildCipherOption("Classic (Playfair)", false),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-                GlassButton(text: "Encrypt & Save", onPressed: _saveNote),
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    "Data encrypted client-side before save",
-                    style: AppTextStyles.label,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCipherOption(String label, bool isAesOption) {
-    final isSelected = _isAes == isAesOption;
-    return GestureDetector(
-      onTap: () => setState(() => _isAes = isAesOption),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.brightTealBlue.withOpacity(0.2)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isSelected
-              ? Border.all(color: AppColors.brightTealBlue)
-              : null,
-        ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Icon(
-              isAesOption ? Icons.memory : Icons.lock_clock,
-              color: isSelected
-                  ? AppColors.brightTealBlue
-                  : AppColors.shadowGrey,
+            GlassTextField(
+              controller: _titleController,
+              hintText: "Title",
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: AppTextStyles.label.copyWith(
-                color: isSelected
-                    ? AppColors.brightTealBlue
-                    : AppColors.shadowGrey,
-              ),
+            const SizedBox(height: 16),
+            GlassTextField(
+              controller: _contentController,
+              hintText: "Write something secure...",
+              maxLines: 10,
             ),
           ],
         ),

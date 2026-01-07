@@ -4,42 +4,57 @@ import '../services/auth_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_text_field.dart';
 import '../widgets/glass_button.dart';
-import 'home_screen.dart';
-import 'register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+import 'login_screen.dart';
+
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({Key? key}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
-  Future<void> _login() async {
+  Future<void> _register() async {
+    if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      await _authService.signIn(
+      await _authService.signUp(
         _emailController.text,
         _passwordController.text,
+        _usernameController.text,
       );
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
-        ),
+      // Navigate to Home or Login depending on email confirmation requirement
+      // For now, assume auto-login or redirect to login to confirm
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Registration successful! Please check email to confirm or login.')),
+      );
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: ${e.toString()}')),
+        SnackBar(content: Text('Error: ${e.toString()}')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -52,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: AppColors.porcelain,
       body: Stack(
         children: [
-          // Background Gradient Blobs
+          // Background Gradient Blobs (Reused from Login)
           Positioned(
             top: -100,
             left: -100,
@@ -96,26 +111,26 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   Icon(
                     Icons.security,
-                    size: 80,
+                    size: 60,
                     color: AppColors.brightTealBlue,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "OneGate",
+                    "Create Account",
                     style: AppTextStyles.display.copyWith(
                       color: AppColors.brightTealBlue,
+                      fontSize: 28,
                     ),
                   ),
-                  Text(
-                    "Secure Access & Storage",
-                    style: AppTextStyles.body,
-                  ),
                   const SizedBox(height: 40),
-
-                  // Login Form
                   GlassCard(
                     child: Column(
                       children: [
+                        GlassTextField(
+                          hintText: "Username",
+                          controller: _usernameController,
+                        ),
+                        const SizedBox(height: 16),
                         GlassTextField(
                           hintText: "Email",
                           controller: _emailController,
@@ -126,25 +141,26 @@ class _LoginScreenState extends State<LoginScreen> {
                           isPassword: true,
                           controller: _passwordController,
                         ),
+                        const SizedBox(height: 16),
+                        GlassTextField(
+                          hintText: "Confirm Password",
+                          isPassword: true,
+                          controller: _confirmPasswordController,
+                        ),
                         const SizedBox(height: 24),
                         _isLoading
                             ? const CircularProgressIndicator()
                             : GlassButton(
-                                text: "Login",
-                                onPressed: _login,
+                                text: "Register",
+                                onPressed: _register,
                               ),
                         const SizedBox(height: 16),
                         TextButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterScreen(),
-                              ),
-                            );
+                            Navigator.pop(context);
                           },
                           child: Text(
-                            "Register",
+                            "Already have an account? Login",
                             style: AppTextStyles.body.copyWith(
                               color: AppColors.brightTealBlue,
                               decoration: TextDecoration.underline,

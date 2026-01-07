@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-
-import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
-import '../core/crypto_utils.dart';
-import '../widgets/glass_card.dart';
-import '../widgets/glass_button.dart';
 import '../models/note.dart';
+import '../services/storage_service.dart';
+import '../widgets/glass_card.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
@@ -17,155 +14,120 @@ class NoteDetailScreen extends StatefulWidget {
 }
 
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
-  bool _showRaw = false;
-  String? _decryptedContent;
-  String _integrityHash = "";
-
-  @override
-  void initState() {
-    super.initState();
-    _decrypt();
-    _calculateHash();
-  }
-
-  void _decrypt() {
-    if (widget.note.isAes) {
-      _decryptedContent = CryptoUtils.decryptAES(widget.note.encryptedContent);
-    } else {
-      // Classic
-      _decryptedContent = CryptoUtils.classicModifiedPlayfair(
-        widget.note.encryptedContent,
-      ); // Reversible for demo
-    }
-  }
-
-  void _calculateHash() {
-    _integrityHash = CryptoUtils.generateSha256(widget.note.encryptedContent);
-  }
+  bool _showCiphertext = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.porcelain,
       appBar: AppBar(
+        title: const Text("Note Detail"),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: BackButton(color: AppColors.shadowGrey),
-        title: Text("Note Detail", style: AppTextStyles.heading),
+        actions: [
+          IconButton(
+            icon: Icon(
+              _showCiphertext ? Icons.visibility_off : Icons.visibility,
+              color: AppColors.brightTealBlue,
+            ),
+            onPressed: () {
+              setState(() {
+                _showCiphertext = !_showCiphertext;
+              });
+            },
+            tooltip: "Toggle Ciphertext View",
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text("Delete Note?"),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text("Cancel")),
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text("Delete")),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                await StorageService().deleteNote(widget.note.id);
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+          )
+        ],
       ),
       body: Stack(
         children: [
-          Positioned(
-            top: 100,
-            right: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppColors.rosewood.withOpacity(0.1),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-
           SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding:
+                const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 80),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GlassCard(
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.rosewood.withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.security,
-                              color: AppColors.rosewood,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              widget.note.title,
-                              style: AppTextStyles.heading,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 32),
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 200),
-                        child: Text(
-                          _showRaw
-                              ? widget.note.encryptedContent
-                              : (_decryptedContent ?? ""),
-                          style: _showRaw
-                              ? GoogleFonts.firaCode(
-                                  fontSize: 14,
-                                  color: AppColors.shadowGrey,
-                                )
-                              : AppTextStyles.body,
-                        ),
-                      ),
-                    ],
-                  ),
+                Text(
+                  widget.note.decryptedTitle ?? "Unknown Title",
+                  style: AppTextStyles.display.copyWith(fontSize: 24),
                 ),
-
+                const SizedBox(height: 8),
+                Text(
+                  "${widget.note.createdAt}",
+                  style: AppTextStyles.label,
+                ),
                 const SizedBox(height: 24),
-
-                GlassButton(
-                  text: _showRaw ? "Show Decrypted" : "Show Raw Ciphertext",
-                  isPrimary: false,
-                  onPressed: () => setState(() => _showRaw = !_showRaw),
-                ),
-
-                const SizedBox(height: 16),
-
                 GlassCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.verified_user,
-                            size: 20,
-                            color: AppColors.brightTealBlue,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_showCiphertext) ...[
+                          Text("ENCRYPTED DATA (IV:Ciphertext)",
+                              style: AppTextStyles.label
+                                  .copyWith(color: Colors.redAccent)),
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            "${widget.note.iv}:${widget.note.encryptedContent}",
+                            style: AppTextStyles.body
+                                .copyWith(fontFamily: 'Courier', fontSize: 12),
                           ),
-                          const SizedBox(width: 8),
+                        ] else ...[
                           Text(
-                            "Integrity Check (SHA-256)",
-                            style: AppTextStyles.label.copyWith(
-                              color: AppColors.brightTealBlue,
-                            ),
+                            widget.note.decryptedContent ?? "No content",
+                            style: AppTextStyles.body,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _integrityHash,
-                        style: GoogleFonts.firaCode(
-                          fontSize: 10,
-                          color: AppColors.shadowGrey.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
+                        ]
+                      ],
+                    ),
                   ),
                 ),
               ],
+            ),
+          ),
+
+          // Algorithm Info Footer
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              color: AppColors.porcelain.withOpacity(0.9),
+              child: Center(
+                child: Text(
+                  "Secured with Dual-Layer Encryption:\nVigenère Cipher (Classic) + AES-256 (Modern)",
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.label
+                      .copyWith(fontSize: 10, color: AppColors.shadowGrey),
+                ),
+              ),
             ),
           ),
         ],

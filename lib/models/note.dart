@@ -1,33 +1,28 @@
 class Note {
   final String id;
-  final String title;
   final String encryptedContent;
-  final DateTime timestamp;
-  final bool isAes; // true = AES, false = Modified Playfair
+  final String iv;
+  final DateTime createdAt;
+
+  // Decrypted property (not stored in DB)
+  String? decryptedContent;
+  String? decryptedTitle;
 
   Note({
     required this.id,
-    required this.title,
     required this.encryptedContent,
-    required this.timestamp,
-    required this.isAes,
+    required this.iv,
+    required this.createdAt,
+    this.decryptedContent,
+    this.decryptedTitle,
   });
 
-  // Mock data for demo
-  static List<Note> mockNotes = [
-    Note(
-      id: '1',
-      title: 'Project X - Phase 2',
-      encryptedContent: 'U2FsdGVkX1+...', // Mock AES
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      isAes: true,
-    ),
-    Note(
-      id: '2',
-      title: 'Secret Journal',
-      encryptedContent: 'OLLEH DLROW', // Mock Playfair
-      timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      isAes: false,
-    ),
-  ];
+  factory Note.fromMap(Map<String, dynamic> map) {
+    return Note(
+      id: map['id'] as String,
+      encryptedContent: map['encrypted_content'] as String,
+      iv: (map['iv'] as String?) ?? '',
+      createdAt: DateTime.parse(map['created_at'] as String).toLocal(),
+    );
+  }
 }
