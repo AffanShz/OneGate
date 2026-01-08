@@ -11,7 +11,8 @@ import 'settings_screen.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  final String secretKey;
+  const HomeScreen({Key? key, required this.secretKey}) : super(key: key);
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -22,73 +23,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   List<Note> notes = [];
   bool _isLoading = true;
-  String? _secretKey;
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(Duration.zero, () => _promptForSecretKey());
-  }
-
-  Future<void> _promptForSecretKey() async {
-    final keyController = TextEditingController();
-    bool isObscured = true;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text("Enter Encryption PIN"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                    "Enter the secret PIN used to encrypt/decrypt your notes."),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: keyController,
-                  obscureText: isObscured,
-                  keyboardType: TextInputType.text, // Allow alphanumeric PINs
-                  decoration: InputDecoration(
-                    hintText: "Secret PIN",
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        isObscured ? Icons.visibility : Icons.visibility_off,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          isObscured = !isObscured;
-                        });
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  if (keyController.text.isNotEmpty) {
-                    _secretKey = keyController.text;
-                    Navigator.pop(context);
-                    _fetchNotes();
-                  }
-                },
-                child: const Text("Unlock"),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    _fetchNotes();
   }
 
   Future<void> _fetchNotes() async {
-    if (_secretKey == null) return;
-
+    // Key is now guaranteed from the widget
     setState(() => _isLoading = true);
     try {
       final data = await _storageService.fetchNotes();
@@ -96,7 +39,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       for (var note in loadedNotes) {
         String combined = "${note.iv}:${note.encryptedContent}";
-        String decrypted = EncryptionService.decryptData(combined, _secretKey!);
+        String decrypted =
+            EncryptionService.decryptData(combined, widget.secretKey);
 
         if (decrypted == "Decryption Failed" || decrypted.isEmpty) {
           note.decryptedTitle = "Locked Note";
@@ -221,8 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     await Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) =>
-                                            NoteDetailScreen(note: note),
+                                        builder: (context) => NoteDetailScreen(
+                                          note: note,
+                                          secretKey: widget.secretKey,
+                                        ),
                                       ),
                                     );
                                     _fetchNotes();
@@ -280,15 +226,11 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: AppColors.brightTealBlue,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () async {
-          if (_secretKey == null) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text("Unlock first!")));
-            return;
-          }
           await Navigator.push(
             context,
             MaterialPageRoute(
-                builder: (context) => AddNoteScreen(secretKey: _secretKey!)),
+                builder: (context) =>
+                    AddNoteScreen(secretKey: widget.secretKey)),
           );
           _fetchNotes();
         },

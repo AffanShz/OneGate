@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StorageService {
@@ -82,12 +83,56 @@ class StorageService {
     }
   }
 
-  /// Delete a note by ID
   Future<void> deleteNote(String noteId) async {
     try {
       await _supabase.from('encrypted_notes').delete().eq('id', noteId);
     } catch (e) {
       throw Exception('Failed to delete note: $e');
+    }
+  }
+
+  /// ONEGATE ATTACHMENT
+
+  /// Upload encrypted attachment bytes to Supabase Storage
+  /// Returns the path to the file.
+  Future<String> uploadAttachment(
+      String userId, String noteId, Uint8List encryptedData) async {
+    try {
+      // Filename: timestamp_uuid_part.bin
+      String shortId = noteId.length >= 8 ? noteId.substring(0, 8) : noteId;
+      final filename = '${DateTime.now().millisecondsSinceEpoch}_$shortId.bin';
+      final path = '$userId/$filename'; // userId/filename folder structure
+
+      await _supabase.storage.from('attachment').uploadBinary(
+            path,
+            encryptedData,
+            fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+          );
+
+      return path;
+    } catch (e) {
+      throw Exception('Failed to upload attachment: $e');
+    }
+  }
+
+  /// Get Signed URL for downloading attachment
+  Future<String> getAttachmentUrl(String path) async {
+    try {
+      // Private bucket requires signed URL
+      return await _supabase.storage
+          .from('attachment')
+          .createSignedUrl(path, 60 * 60); // 1 hour expiry
+    } catch (e) {
+      throw Exception('Failed to get attachment URL: $e');
+    }
+  }
+
+  /// Download attachment bytes directly (alternative to URL)
+  Future<Uint8List> downloadAttachment(String path) async {
+    try {
+      return await _supabase.storage.from('attachment').download(path);
+    } catch (e) {
+      throw Exception('Failed to download attachment: $e');
     }
   }
 }

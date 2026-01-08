@@ -4,7 +4,8 @@ import '../services/auth_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_text_field.dart';
 import '../widgets/glass_button.dart';
-import 'home_screen.dart';
+import 'package:onegate/services/pin_service.dart';
+import 'package:onegate/screens/pin_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -30,10 +31,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
+      // Check for PIN or force setup
+      bool hasPin = await PinService.hasPin();
+
+      if (!mounted) return;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
+          builder: (context) => PinScreen(isSetup: !hasPin),
         ),
       );
     } catch (e) {
