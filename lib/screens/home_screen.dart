@@ -38,9 +38,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final loadedNotes = data.map((e) => Note.fromMap(e)).toList();
 
       for (var note in loadedNotes) {
-        String combined = "${note.iv}:${note.encryptedContent}";
-        String decrypted =
-            EncryptionService.decryptData(combined, widget.secretKey);
+        // New encryption format: use encryptedContent directly (no IV:CipherText)
+        String decrypted = EncryptionService.decryptData(
+            note.encryptedContent, widget.secretKey);
 
         if (decrypted == "Decryption Failed" || decrypted.isEmpty) {
           note.decryptedTitle = "Locked Note";

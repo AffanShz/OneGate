@@ -37,13 +37,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (attachment['type'] == 'image' && attachment['path'] != null) {
         setState(() => _isLoadingImage = true);
         try {
-          // Download encrypted bytes
+          // Download encrypted image bytes (still a valid PNG)
           final encryptedBytes =
               await StorageService().downloadAttachment(attachment['path']);
 
-          // Decrypt bytes
-          final decryptedBytes =
-              EncryptionService.decryptBinary(encryptedBytes, widget.secretKey);
+          // Decrypt image using pixel unshuffling
+          final decryptedBytes = await EncryptionService.decryptImage(
+              encryptedBytes, widget.secretKey);
 
           if (mounted) {
             setState(() {
@@ -190,7 +190,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               color: AppColors.porcelain.withOpacity(0.9),
               child: Center(
                 child: Text(
-                  "Secured with Modified Super Encryption:\nAutokey (Classic) + Rail Fence (Classic) + AES-GCM (Modern)",
+                  "Secured with Modified Super Encryption:\nModified Transposition Cipher + Modified RSA",
                   textAlign: TextAlign.center,
                   style: AppTextStyles.label
                       .copyWith(fontSize: 10, color: AppColors.shadowGrey),

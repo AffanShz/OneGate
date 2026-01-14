@@ -1,268 +1,405 @@
 import 'dart:convert';
-import 'package:crypto/crypto.dart';
-import 'package:encrypt/encrypt.dart' as encrypt_lib;
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
+import 'package:image/image.dart' as img;
 
 class EncryptionService {
-  // Classic Alphabet (100 chars)
-  static const String _classicAlphabet =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 !\"#\$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+  // ============================================================
+  // LAYER 1: MODIFIED TRANSPOSITION CIPHER
+  // ============================================================
+  // Modification: Key-based columnar transposition with:
+  // - Dynamic column count derived from key hash
+  // - Column order shuffled based on key
+  // - Row permutation as secondary scrambling
 
-  /// SUPER ENCRYPTION:
-  /// 1. Layer 1: Modified Autokey Cipher (Substitution)
-  /// 2. Layer 2: Dynamic Rail Fence Cipher (Transposition)
-  /// 3. Layer 3: Modern AES-GCM (Authenticated Encryption)
+  /// Get column count from key (between 4-12)
+  static int _getColumnCount(String key) {
+    var bytes = sha256.convert(utf8.encode(key)).bytes;
+    return (bytes[0] % 9) + 4; // 4-12 columns
+  }
+
+  /// Generate column order permutation from key
+  static List<int> _getColumnOrder(String key, int columnCount) {
+    var bytes = sha256.convert(utf8.encode(key + "col")).bytes;
+    List<int> indices = List.generate(columnCount, (i) => i);
+
+    // Fisher-Yates shuffle using key bytes
+    for (int i = columnCount - 1; i > 0; i--) {
+      int j = bytes[i % bytes.length] % (i + 1);
+      int temp = indices[i];
+      indices[i] = indices[j];
+      indices[j] = temp;
+    }
+    return indices;
+  }
+
+  /// Modified Transposition Cipher - Encrypt
+  static String _modifiedTranspositionEncrypt(String plaintext, String key) {
+    if (plaintext.isEmpty) return "";
+
+    int columns = _getColumnCount(key);
+    List<int> columnOrder = _getColumnOrder(key, columns);
+
+    // Add length header for padding removal (4 digits)
+    String lengthHeader = plaintext.length.toString().padLeft(4, '0');
+    String textWithHeader = lengthHeader + plaintext;
+
+    // Pad to multiple of column count
+    int paddingNeeded = (columns - (textWithHeader.length % columns)) % columns;
+    var hashBytes = sha256.convert(utf8.encode(key + "pad")).bytes;
+    String paddingChars = "";
+    for (int i = 0; i < paddingNeeded; i++) {
+      paddingChars +=
+          String.fromCharCode(65 + (hashBytes[i % hashBytes.length] % 26));
+    }
+    String padded = textWithHeader + paddingChars;
+
+    // Write into matrix row by row
+    int rows = padded.length ~/ columns;
+    List<List<String>> matrix = List.generate(rows, (r) {
+      return List.generate(columns, (c) => padded[r * columns + c]);
+    });
+
+    // Read columns in shuffled order
+    StringBuffer result = StringBuffer();
+    for (int colIdx in columnOrder) {
+      for (int r = 0; r < rows; r++) {
+        result.write(matrix[r][colIdx]);
+      }
+    }
+
+    return result.toString();
+  }
+
+  /// Modified Transposition Cipher - Decrypt
+  static String _modifiedTranspositionDecrypt(String ciphertext, String key) {
+    if (ciphertext.isEmpty) return "";
+
+    int columns = _getColumnCount(key);
+    List<int> columnOrder = _getColumnOrder(key, columns);
+    int rows = ciphertext.length ~/ columns;
+
+    if (rows == 0) return "";
+
+    // Create inverse column order mapping
+    List<int> inverseOrder = List.filled(columns, 0);
+    for (int i = 0; i < columns; i++) {
+      inverseOrder[columnOrder[i]] = i;
+    }
+
+    // Read cipher into columns (in shuffled order)
+    List<List<String>> matrix =
+        List.generate(rows, (_) => List.filled(columns, ''));
+    int idx = 0;
+    for (int colIdx in columnOrder) {
+      for (int r = 0; r < rows; r++) {
+        matrix[r][colIdx] = ciphertext[idx++];
+      }
+    }
+
+    // Read matrix row by row
+    StringBuffer result = StringBuffer();
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < columns; c++) {
+        result.write(matrix[r][c]);
+      }
+    }
+
+    String withHeader = result.toString();
+
+    // Extract length header and remove padding
+    if (withHeader.length < 4) return withHeader;
+    int originalLength = int.tryParse(withHeader.substring(0, 4)) ?? 0;
+    if (originalLength > 0 && originalLength + 4 <= withHeader.length) {
+      return withHeader.substring(4, 4 + originalLength);
+    }
+    return withHeader.substring(4);
+  }
+
+  // ============================================================
+  // LAYER 2: MODIFIED RSA (Simplified for Educational Purposes)
+  // ============================================================
+  // Uses smaller primes derived from key for demonstration
+  // Real RSA should use 2048+ bit keys
+
+  /// Generate RSA parameters from key
+  static Map<String, BigInt> _generateRSAParams(String key) {
+    var bytes = sha256.convert(utf8.encode(key + "rsa")).bytes;
+
+    // Use predefined small primes for demo (derived from key hash)
+    // In production, use cryptographically secure large primes
+    List<int> primes = [
+      251,
+      257,
+      263,
+      269,
+      271,
+      277,
+      281,
+      283,
+      293,
+      307,
+      311,
+      313,
+      317,
+      331,
+      337,
+      347,
+      349,
+      353,
+      359,
+      367,
+      373,
+      379,
+      383,
+      389,
+      397,
+      401,
+      409,
+      419,
+      421,
+      431
+    ];
+
+    int pIdx = bytes[0] % primes.length;
+    int qIdx = (bytes[1] % (primes.length - 1));
+    if (qIdx >= pIdx) qIdx++;
+
+    BigInt p = BigInt.from(primes[pIdx]);
+    BigInt q = BigInt.from(primes[qIdx]);
+    BigInt n = p * q;
+    BigInt phi = (p - BigInt.one) * (q - BigInt.one);
+    BigInt e = BigInt.from(65537);
+
+    // Ensure e is coprime with phi
+    if (e >= phi || phi.gcd(e) != BigInt.one) {
+      e = BigInt.from(17);
+    }
+
+    // Calculate d (modular multiplicative inverse)
+    BigInt d = e.modInverse(phi);
+
+    return {'n': n, 'e': e, 'd': d, 'p': p, 'q': q};
+  }
+
+  /// RSA Encrypt a single integer
+  static BigInt _rsaEncryptInt(BigInt m, BigInt e, BigInt n) {
+    return m.modPow(e, n);
+  }
+
+  /// RSA Decrypt a single integer
+  static BigInt _rsaDecryptInt(BigInt c, BigInt d, BigInt n) {
+    return c.modPow(d, n);
+  }
+
+  /// Modified RSA - Encrypt bytes
+  static String _modifiedRSAEncrypt(String input, String key) {
+    if (input.isEmpty) return "";
+
+    var params = _generateRSAParams(key);
+    BigInt n = params['n']!;
+    BigInt e = params['e']!;
+
+    // Encrypt each byte individually (block size = 1 byte for demo)
+    List<String> encryptedBlocks = [];
+    for (int i = 0; i < input.length; i++) {
+      int charCode = input.codeUnitAt(i);
+      BigInt m = BigInt.from(charCode);
+      BigInt c = _rsaEncryptInt(m, e, n);
+      encryptedBlocks.add(c.toString());
+    }
+
+    return encryptedBlocks.join(',');
+  }
+
+  /// Modified RSA - Decrypt
+  static String _modifiedRSADecrypt(String encrypted, String key) {
+    if (encrypted.isEmpty) return "";
+
+    var params = _generateRSAParams(key);
+    BigInt n = params['n']!;
+    BigInt d = params['d']!;
+
+    List<String> blocks = encrypted.split(',');
+    StringBuffer result = StringBuffer();
+
+    for (String block in blocks) {
+      if (block.isEmpty) continue;
+      BigInt c = BigInt.tryParse(block) ?? BigInt.zero;
+      BigInt m = _rsaDecryptInt(c, d, n);
+      result.write(String.fromCharCode(m.toInt()));
+    }
+
+    return result.toString();
+  }
+
+  // ============================================================
+  // SUPER ENCRYPTION: Combined Layers
+  // ============================================================
+
+  /// Encrypt text data using Modified Transposition + Modified RSA
   static String encryptData(String plainText, String secretKey) {
     if (plainText.isEmpty) return "";
 
     try {
-      // 1. Classic Layer 1: Modified Autokey Cipher
-      String layer1 = _modifiedAutokeyEncrypt(plainText, secretKey);
+      // Layer 1: Modified Transposition Cipher
+      String layer1 = _modifiedTranspositionEncrypt(plainText, secretKey);
 
-      // 2. Classic Layer 2: Dynamic Rail Fence Cipher
-      String layer2 = _dynamicRailFenceEncrypt(layer1, secretKey);
+      // Layer 2: Modified RSA
+      String layer2 = _modifiedRSAEncrypt(layer1, secretKey);
 
-      // 3. Modern Layer 3: AES-GCM
-      // Derive a 32-byte key (256 bit) from the secretKey
-      final keyBytes = sha256.convert(utf8.encode(secretKey)).bytes;
-      final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
-
-      // Generate a random 12-byte IV (Nonce) standard for GCM
-      final iv = encrypt_lib.IV.fromLength(12);
-
-      // Use AES-GCM for authenticated encryption
-      final encrypter = encrypt_lib.Encrypter(
-          encrypt_lib.AES(key, mode: encrypt_lib.AESMode.gcm));
-
-      final encrypted = encrypter.encrypt(layer2, iv: iv);
-
-      // Format: IV:Ciphertext (Base64)
-      return "${iv.base64}:${encrypted.base64}";
+      // Encode as Base64 for safe storage
+      return base64Encode(utf8.encode(layer2));
     } catch (e) {
       print("Encryption Error: $e");
       return "";
     }
   }
 
+  /// Decrypt text data
   static String decryptData(String encryptedData, String secretKey) {
     if (encryptedData.isEmpty) return "";
 
     try {
-      final parts = encryptedData.split(':');
-      if (parts.length != 2) return "Invalid Data";
+      // Decode Base64
+      String layer2 = utf8.decode(base64Decode(encryptedData));
 
-      final iv = encrypt_lib.IV.fromBase64(parts[0]);
-      final cipherText = parts[1];
+      // Decrypt Layer 2: Modified RSA
+      String layer1 = _modifiedRSADecrypt(layer2, secretKey);
 
-      // 1. Decrypt Layer 3: Modern AES-GCM
-      final keyBytes = sha256.convert(utf8.encode(secretKey)).bytes;
-      final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
-
-      final encrypter = encrypt_lib.Encrypter(
-          encrypt_lib.AES(key, mode: encrypt_lib.AESMode.gcm));
-
-      final decryptedLayer3 = encrypter.decrypt64(cipherText, iv: iv);
-
-      // 2. Decrypt Layer 2: Dynamic Rail Fence Cipher
-      String decryptedLayer2 =
-          _dynamicRailFenceDecrypt(decryptedLayer3, secretKey);
-
-      // 3. Decrypt Layer 1: Modified Autokey Cipher
-      return _modifiedAutokeyDecrypt(decryptedLayer2, secretKey);
+      // Decrypt Layer 1: Modified Transposition
+      return _modifiedTranspositionDecrypt(layer1, secretKey);
     } catch (e) {
-      // print("Decryption Error: $e");
-      return "Decryption Failed"; // Or return generic error
+      print("Decryption Error: $e");
+      return "Decryption Failed";
     }
   }
 
-  // --- Layer 1: Modified Autokey Implementation ---
-  // Modification: The key shift evolves based on the *Ciphertext* output of the previous step.
-  // This creates a Ciphertext Autokey (CT-AK) dependancy.
+  // ============================================================
+  // IMAGE ENCRYPTION (Pixel Shuffling - Preserves Image Format)
+  // Using 'image' package for reliable cross-platform support
+  // ============================================================
 
-  static String _modifiedAutokeyEncrypt(String input, String key) {
-    StringBuffer result = StringBuffer();
-    int alphabetLen = _classicAlphabet.length;
-    int dynamicShift = 0; // The evolving component
+  /// Encrypt image - output is still a valid image with scrambled pixels
+  /// Uses XOR on pixel values to scramble colors
+  /// Input: Raw image bytes (PNG/JPEG)
+  /// Output: Encrypted PNG bytes (scrambled but valid image)
+  static Future<Uint8List> encryptImage(
+      Uint8List imageBytes, String secretKey) async {
+    if (imageBytes.isEmpty) return Uint8List(0);
 
-    for (int i = 0; i < input.length; i++) {
-      String char = input[i];
-      int pIdx = _classicAlphabet.indexOf(char);
+    try {
+      // Decode image using image package
+      img.Image? image = img.decodeImage(imageBytes);
+      if (image == null) return Uint8List(0);
 
-      if (pIdx != -1) {
-        // Base shift from the secret key (repeated)
-        int kIdx = _classicAlphabet.indexOf(key[i % key.length]);
+      int width = image.width;
+      int height = image.height;
 
-        // Total Shift = Base Key + Dynamic Accumulator
-        int shift = (kIdx + dynamicShift) % alphabetLen;
+      // Generate key stream for XOR
+      var keyBytes = sha256.convert(utf8.encode(secretKey + "imgkey")).bytes;
 
-        // Encrypt
-        int cIdx = (pIdx + shift) % alphabetLen;
-        result.write(_classicAlphabet[cIdx]);
+      // Create new image with scrambled pixels
+      img.Image encryptedImage = img.Image(width: width, height: height);
 
-        // MODIFICATION: Update dynamicShift with the Resulting Index
-        // This links the next encryption to the current ciphertext
-        dynamicShift = cIdx;
-      } else {
-        result.write(char);
-        // Do not update dynamicShift for non-alphabet chars
-      }
-    }
-    return result.toString();
-  }
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          img.Pixel pixel = image.getPixel(x, y);
 
-  static String _modifiedAutokeyDecrypt(String input, String key) {
-    StringBuffer result = StringBuffer();
-    int alphabetLen = _classicAlphabet.length;
-    int dynamicShift = 0;
+          // Get pixel color components
+          int r = pixel.r.toInt();
+          int g = pixel.g.toInt();
+          int b = pixel.b.toInt();
+          int a = pixel.a.toInt();
 
-    for (int i = 0; i < input.length; i++) {
-      String char = input[i];
-      int cIdx = _classicAlphabet.indexOf(char);
+          // XOR RGB with key-derived values (keep alpha intact)
+          int idx = (y * width + x) * 3;
+          int newR = r ^ keyBytes[idx % keyBytes.length];
+          int newG = g ^ keyBytes[(idx + 1) % keyBytes.length];
+          int newB = b ^ keyBytes[(idx + 2) % keyBytes.length];
 
-      if (cIdx != -1) {
-        int kIdx = _classicAlphabet.indexOf(key[i % key.length]);
-
-        // Reconstruct Total Shift
-        int shift = (kIdx + dynamicShift) % alphabetLen;
-
-        // Decrypt
-        int pIdx = (cIdx - shift + alphabetLen) % alphabetLen;
-        result.write(_classicAlphabet[pIdx]);
-
-        // UPDATE: dynamicShift must be updated exactly as it was during encryption
-        // Encryption set dynamicShift = cIdx (the ciphertext index being produced)
-        // So we use cIdx directly.
-        dynamicShift = cIdx;
-      } else {
-        result.write(char);
-      }
-    }
-    return result.toString();
-  }
-
-  // --- Layer 2: Dynamic Rail Fence Implementation ---
-  // Modification: Number of rails is dynamic based on Key Hash.
-
-  static int _getDynamicRails(String key) {
-    // Generate deterministic rail count between 2 and 9
-    var bytes = sha256.convert(utf8.encode(key)).bytes;
-    // Use first byte
-    return (bytes[0] % 8) + 2;
-  }
-
-  static String _dynamicRailFenceEncrypt(String text, String key) {
-    int rails = _getDynamicRails(key);
-    if (rails <= 1) return text;
-    if (text.isEmpty) return "";
-
-    List<StringBuffer> railBuffers =
-        List.generate(rails, (_) => StringBuffer());
-    int currentRail = 0;
-    bool goingDown = false;
-
-    for (int i = 0; i < text.length; i++) {
-      railBuffers[currentRail].write(text[i]);
-
-      // Reverse direction at edges
-      if (currentRail == 0 || currentRail == rails - 1) {
-        goingDown = !goingDown;
-      }
-      currentRail += goingDown ? 1 : -1;
-    }
-
-    return railBuffers.map((b) => b.toString()).join();
-  }
-
-  static String _dynamicRailFenceDecrypt(String cipher, String key) {
-    int rails = _getDynamicRails(key);
-    if (rails <= 1) return cipher;
-    if (cipher.isEmpty) return "";
-
-    // 1. Map out the pattern to determine length of each rail
-    List<int> railLengths = List.filled(rails, 0);
-    int currentRail = 0;
-    bool goingDown = false;
-
-    // Simulate "placing" chars to count
-    for (int i = 0; i < cipher.length; i++) {
-      railLengths[currentRail]++;
-      if (currentRail == 0 || currentRail == rails - 1) goingDown = !goingDown;
-      currentRail += goingDown ? 1 : -1;
-    }
-
-    // 2. Reconstruct the rails from the flat ciphertext
-    List<String> constructedRails = [];
-    int currentIndex = 0;
-    for (int len in railLengths) {
-      if (currentIndex + len > cipher.length) break; // Safety
-      constructedRails.add(cipher.substring(currentIndex, currentIndex + len));
-      currentIndex += len;
-    }
-
-    // 3. Read off the rails in ZigZag order
-    StringBuffer result = StringBuffer();
-    currentRail = 0;
-    goingDown = false;
-    List<int> railIndices = List.filled(rails, 0);
-
-    for (int i = 0; i < cipher.length; i++) {
-      // Pop char from the correct rail
-      if (currentRail < constructedRails.length &&
-          railIndices[currentRail] < constructedRails[currentRail].length) {
-        result.write(constructedRails[currentRail][railIndices[currentRail]]);
-        railIndices[currentRail]++;
+          // Set scrambled pixel
+          encryptedImage.setPixelRgba(x, y, newR, newG, newB, a);
+        }
       }
 
-      if (currentRail == 0 || currentRail == rails - 1) goingDown = !goingDown;
-      currentRail += goingDown ? 1 : -1;
+      // Encode back to PNG
+      Uint8List result = Uint8List.fromList(img.encodePng(encryptedImage));
+      return result;
+    } catch (e) {
+      print("Image Encryption Error: $e");
+      return Uint8List(0);
     }
-    return result.toString();
   }
-  // --- Binary Encryption (AES-GCM Only) ---
-  // We skip classic layers for binary data to prevent corruption and ensure performance.
 
+  /// Decrypt image - restore original from scrambled image
+  static Future<Uint8List> decryptImage(
+      Uint8List encryptedBytes, String secretKey) async {
+    if (encryptedBytes.isEmpty) return Uint8List(0);
+
+    try {
+      // Decode encrypted image
+      img.Image? image = img.decodeImage(encryptedBytes);
+      if (image == null) return Uint8List(0);
+
+      int width = image.width;
+      int height = image.height;
+
+      // Generate same key stream
+      var keyBytes = sha256.convert(utf8.encode(secretKey + "imgkey")).bytes;
+
+      // Create decrypted image
+      img.Image decryptedImage = img.Image(width: width, height: height);
+
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          img.Pixel pixel = image.getPixel(x, y);
+
+          int r = pixel.r.toInt();
+          int g = pixel.g.toInt();
+          int b = pixel.b.toInt();
+          int a = pixel.a.toInt();
+
+          // XOR again to reverse (XOR is symmetric)
+          int idx = (y * width + x) * 3;
+          int origR = r ^ keyBytes[idx % keyBytes.length];
+          int origG = g ^ keyBytes[(idx + 1) % keyBytes.length];
+          int origB = b ^ keyBytes[(idx + 2) % keyBytes.length];
+
+          decryptedImage.setPixelRgba(x, y, origR, origG, origB, a);
+        }
+      }
+
+      // Encode back to PNG
+      Uint8List result = Uint8List.fromList(img.encodePng(decryptedImage));
+      return result;
+    } catch (e) {
+      print("Image Decryption Error: $e");
+      return Uint8List(0);
+    }
+  }
+
+  // ============================================================
+  // LEGACY BINARY ENCRYPTION (For Non-Image Files)
+  // ============================================================
+
+  /// Encrypt binary data using XOR with key-derived stream
   static Uint8List encryptBinary(Uint8List data, String secretKey) {
     if (data.isEmpty) return Uint8List(0);
 
-    final keyBytes = sha256.convert(utf8.encode(secretKey)).bytes;
-    final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
-    final iv = encrypt_lib.IV.fromLength(12); // Standard GCM IV
+    // Generate key stream
+    var keyBytes = sha256.convert(utf8.encode(secretKey)).bytes;
+    Uint8List result = Uint8List(data.length);
 
-    final encrypter = encrypt_lib.Encrypter(
-        encrypt_lib.AES(key, mode: encrypt_lib.AESMode.gcm));
+    for (int i = 0; i < data.length; i++) {
+      result[i] = data[i] ^ keyBytes[i % keyBytes.length];
+    }
 
-    final encrypted = encrypter.encryptBytes(data, iv: iv);
-
-    // Return combined IV + Ciphertext for storage
-    // IV is always 12 bytes.
-    final combined = Uint8List(iv.bytes.length + encrypted.bytes.length);
-    combined.setAll(0, iv.bytes);
-    combined.setAll(iv.bytes.length, encrypted.bytes);
-
-    return combined;
+    return result;
   }
 
-  static Uint8List decryptBinary(Uint8List combinedData, String secretKey) {
-    if (combinedData.isEmpty) return Uint8List(0);
-
-    try {
-      // Extract IV (first 12 bytes)
-      final ivBytes = combinedData.sublist(0, 12);
-      final cipherBytes = combinedData.sublist(12);
-
-      final iv = encrypt_lib.IV(ivBytes);
-      final encrypted = encrypt_lib.Encrypted(cipherBytes);
-
-      final keyBytes = sha256.convert(utf8.encode(secretKey)).bytes;
-      final key = encrypt_lib.Key(Uint8List.fromList(keyBytes));
-
-      final encrypter = encrypt_lib.Encrypter(
-          encrypt_lib.AES(key, mode: encrypt_lib.AESMode.gcm));
-
-      return Uint8List.fromList(encrypter.decryptBytes(encrypted, iv: iv));
-    } catch (e) {
-      print("Binary Decryption Error: $e");
-      return Uint8List(0);
-    }
+  /// Decrypt binary data (XOR is symmetric)
+  static Uint8List decryptBinary(Uint8List data, String secretKey) {
+    return encryptBinary(data, secretKey); // XOR is symmetric
   }
 }

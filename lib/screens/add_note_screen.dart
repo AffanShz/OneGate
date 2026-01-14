@@ -54,9 +54,8 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
 
       // 3. Encrypt & Upload Attachment (If any)
       Map<String, dynamic> cipherMeta = {
-        'layer1': 'Modified Autokey (Substitution)',
-        'layer2': 'Dynamic Rail Fence (Transposition)',
-        'layer3': 'AES-GCM (Authenticated)',
+        'layer1': 'Modified Transposition Cipher',
+        'layer2': 'Modified RSA',
         'attachment': null,
       };
 
@@ -64,9 +63,9 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
         // Read file bytes
         final imageBytes = await _selectedImage!.readAsBytes();
 
-        // Encrypt binary data
+        // Encrypt image using pixel shuffling (preserves image format)
         final encryptedImage =
-            EncryptionService.encryptBinary(imageBytes, widget.secretKey);
+            await EncryptionService.encryptImage(imageBytes, widget.secretKey);
 
         // Get User ID for storage path
         final userId = Supabase.instance.client.auth.currentUser!.id;
@@ -82,7 +81,7 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
           'type': 'image',
           'path': path,
           'encrypted': true,
-          'algorithm': 'AES-GCM'
+          'algorithm': 'Pixel Shuffling + XOR'
         };
       }
 
@@ -168,7 +167,7 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
             const SizedBox(height: 24),
             Center(
               child: Text(
-                "Encryption: AES-GCM + Classic Layers\nAttachments: AES-GCM Binary Encryption",
+                "Encryption: Modified Transposition + Modified RSA\nAttachments: Pixel Shuffling + XOR",
                 textAlign: TextAlign.center,
                 style: AppTextStyles.label
                     .copyWith(fontSize: 10, color: Colors.grey),

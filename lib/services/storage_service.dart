@@ -29,7 +29,7 @@ class StorageService {
   /// - hmac (we might need to generate this or just store dummy/hash if not using specific HMAC logic separately)
   /// - cipher_meta (jsonb)
   Future<void> createNote({
-    required String combinedEncryptedData, // "IV:CipherText"
+    required String combinedEncryptedData, // Encrypted data (base64)
     required String
         hmac, // You might generate a HMAC of the ciphertext/iv for integrity
     required Map<String, dynamic> cipherMeta,
@@ -37,10 +37,11 @@ class StorageService {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('User not logged in');
 
-    // Split the combined string from EncryptionService
-    final parts = combinedEncryptedData.split(':');
-    final iv = parts[0];
-    final encryptedContent = parts[1];
+    // New encryption format: single base64 string (no IV:CipherText split)
+    // For backwards compatibility, store entire string in encrypted_content
+    // IV field is now just a placeholder since Modified RSA doesn't use IV
+    final encryptedContent = combinedEncryptedData;
+    const iv = 'NO_IV_USED'; // Placeholder for new encryption algorithm
 
     try {
       await _supabase.from('encrypted_notes').insert({
@@ -66,9 +67,9 @@ class StorageService {
     final user = _supabase.auth.currentUser;
     if (user == null) throw Exception('User not logged in');
 
-    final parts = combinedEncryptedData.split(':');
-    final iv = parts[0];
-    final encryptedContent = parts[1];
+    // New encryption format: single base64 string (no IV:CipherText split)
+    final encryptedContent = combinedEncryptedData;
+    const iv = 'NO_IV_USED'; // Placeholder for new encryption algorithm
 
     try {
       await _supabase.from('encrypted_notes').update({
