@@ -45,14 +45,14 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Prepare Note Content
+      // 1. Siapkan Konten Catatan
       final fullText = "${_titleController.text}\n\n${_contentController.text}";
 
-      // 2. Encrypt Text Content (Existing Logic)
+      // 2. Enkripsi Konten Teks (Logika yang Ada)
       final encryptedData =
           EncryptionService.encryptData(fullText, widget.secretKey);
 
-      // 3. Encrypt & Upload Attachment (If any)
+      // 3. Enkripsi & Unggah Lampiran (Jika ada)
       Map<String, dynamic> cipherMeta = {
         'layer1': 'Modified Transposition Cipher',
         'layer2': 'Modified RSA',
@@ -60,23 +60,23 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
       };
 
       if (_selectedImage != null) {
-        // Read file bytes
+        // Baca byte file
         final imageBytes = await _selectedImage!.readAsBytes();
 
-        // Encrypt image using pixel shuffling (preserves image format)
+        // Enkripsi gambar menggunakan pengacakan piksel (mempertahankan format gambar)
         final encryptedImage =
             await EncryptionService.encryptImage(imageBytes, widget.secretKey);
 
-        // Get User ID for storage path
+        // Dapatkan ID Pengguna untuk jalur penyimpanan
         final userId = Supabase.instance.client.auth.currentUser!.id;
 
-        // Upload (using a temp ID for filename)
+        // Unggah (menggunakan ID sementara untuk nama file)
         final tempId = DateTime.now().toIso8601String();
 
         final path = await _storageService.uploadAttachment(
             userId, tempId, encryptedImage);
 
-        // Update meta
+        // Perbarui meta
         cipherMeta['attachment'] = {
           'type': 'image',
           'path': path,
@@ -85,10 +85,10 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
         };
       }
 
-      // 4. Create Note Record
+      // 4. Buat Rekaman Catatan
       await _storageService.createNote(
         combinedEncryptedData: encryptedData,
-        hmac: "HMAC-SHA256", // Placeholder for now
+        hmac: "HMAC-SHA256", // Placeholder untuk saat ini
         cipherMeta: cipherMeta,
       );
 

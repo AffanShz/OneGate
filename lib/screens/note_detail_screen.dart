@@ -8,7 +8,7 @@ import '../widgets/glass_card.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final Note note;
-  final String secretKey; // Need key for image decryption
+  final String secretKey; // Butuh kunci untuk dekripsi gambar
 
   const NoteDetailScreen(
       {Key? key, required this.note, required this.secretKey})
@@ -19,9 +19,10 @@ class NoteDetailScreen extends StatefulWidget {
 }
 
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
-  // Default to FALSE (Show Encrypted/Ciphertext by default)
+  // Default ke FALSE (Tampilkan Terenkripsi/Ciphertext secara default)
   bool _showDecrypted = false;
   Uint8List? _decryptedImage;
+  Uint8List? _encryptedImage;
   bool _isLoadingImage = false;
 
   @override
@@ -37,16 +38,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (attachment['type'] == 'image' && attachment['path'] != null) {
         setState(() => _isLoadingImage = true);
         try {
-          // Download encrypted image bytes (still a valid PNG)
+          // Unduh byte gambar terenkripsi (masih PNG yang valid)
           final encryptedBytes =
               await StorageService().downloadAttachment(attachment['path']);
 
-          // Decrypt image using pixel unshuffling
+          // Dekripsi gambar menggunakan pixel unshuffling
           final decryptedBytes = await EncryptionService.decryptImage(
               encryptedBytes, widget.secretKey);
 
           if (mounted) {
             setState(() {
+              _encryptedImage = encryptedBytes;
               _decryptedImage = decryptedBytes;
             });
           }
@@ -70,8 +72,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         actions: [
           IconButton(
             icon: Icon(
-              // If Decrypted is shown, button is to Hide (Off)
-              // If Encrypted is shown, button is to Show (On)
+              // Jika Terdekripsi ditampilkan, tombol untuk Sembunyikan (Mati)
+              // Jika Terenkripsi ditampilkan, tombol untuk Tampilkan (Nyala)
               _showDecrypted ? Icons.visibility_off : Icons.visibility,
               color: AppColors.brightTealBlue,
             ),
@@ -158,19 +160,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
                 const SizedBox(height: 24),
 
-                // Attachment Section
+                // Bagian Lampiran
                 if (_isLoadingImage)
                   const Center(child: CircularProgressIndicator())
-                else if (_decryptedImage != null)
+                else if (_encryptedImage != null)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Attachment", style: AppTextStyles.heading),
+                      Text(
+                          _showDecrypted
+                              ? "Attachment (Decrypted)"
+                              : "Attachment (Encrypted)",
+                          style: AppTextStyles.heading),
                       const SizedBox(height: 8),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Image.memory(
-                          _decryptedImage!,
+                          _showDecrypted
+                              ? (_decryptedImage ?? _encryptedImage!)
+                              : _encryptedImage!,
                           fit: BoxFit.cover,
                         ),
                       ),
@@ -180,7 +188,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ),
 
-          // Algorithm Info Footer
+          // Footer Info Algoritma
           Positioned(
             bottom: 0,
             left: 0,

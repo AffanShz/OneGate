@@ -5,25 +5,26 @@ import 'package:image/image.dart' as img;
 
 class EncryptionService {
   // ============================================================
-  // LAYER 1: MODIFIED TRANSPOSITION CIPHER
   // ============================================================
-  // Modification: Key-based columnar transposition with:
-  // - Dynamic column count derived from key hash
-  // - Column order shuffled based on key
-  // - Row permutation as secondary scrambling
+  // LAYER 1: MODIFIED TRANSPOSITION CIPHER (CIPHER TRANSPOSISI TERMODIFIKASI)
+  // ============================================================
+  // Modifikasi: Transposisi kolom berbasis kunci dengan:
+  // - Jumlah kolom dinamis yang diturunkan dari hash kunci
+  // - Urutan kolom diacak berdasarkan kunci
+  // - Permutasi baris sebagai pengacakan sekunder
 
-  /// Get column count from key (between 4-12)
+  /// Dapatkan jumlah kolom dari kunci (antara 4-12)
   static int _getColumnCount(String key) {
     var bytes = sha256.convert(utf8.encode(key)).bytes;
     return (bytes[0] % 9) + 4; // 4-12 columns
   }
 
-  /// Generate column order permutation from key
+  /// Hasilkan permutasi urutan kolom dari kunci
   static List<int> _getColumnOrder(String key, int columnCount) {
     var bytes = sha256.convert(utf8.encode(key + "col")).bytes;
     List<int> indices = List.generate(columnCount, (i) => i);
 
-    // Fisher-Yates shuffle using key bytes
+    // Pengacakan Fisher-Yates menggunakan byte kunci
     for (int i = columnCount - 1; i > 0; i--) {
       int j = bytes[i % bytes.length] % (i + 1);
       int temp = indices[i];
@@ -33,18 +34,18 @@ class EncryptionService {
     return indices;
   }
 
-  /// Modified Transposition Cipher - Encrypt
+  /// Modified Transposition Cipher - Enkripsi
   static String _modifiedTranspositionEncrypt(String plaintext, String key) {
     if (plaintext.isEmpty) return "";
 
     int columns = _getColumnCount(key);
     List<int> columnOrder = _getColumnOrder(key, columns);
 
-    // Add length header for padding removal (4 digits)
+    // Tambahkan header panjang untuk penghapusan padding (4 digit)
     String lengthHeader = plaintext.length.toString().padLeft(4, '0');
     String textWithHeader = lengthHeader + plaintext;
 
-    // Pad to multiple of column count
+    // Pad ke kelipatan jumlah kolom
     int paddingNeeded = (columns - (textWithHeader.length % columns)) % columns;
     var hashBytes = sha256.convert(utf8.encode(key + "pad")).bytes;
     String paddingChars = "";
@@ -54,13 +55,13 @@ class EncryptionService {
     }
     String padded = textWithHeader + paddingChars;
 
-    // Write into matrix row by row
+    // Tulis ke dalam matriks baris demi baris
     int rows = padded.length ~/ columns;
     List<List<String>> matrix = List.generate(rows, (r) {
       return List.generate(columns, (c) => padded[r * columns + c]);
     });
 
-    // Read columns in shuffled order
+    // Baca kolom dalam urutan acak
     StringBuffer result = StringBuffer();
     for (int colIdx in columnOrder) {
       for (int r = 0; r < rows; r++) {
@@ -71,7 +72,7 @@ class EncryptionService {
     return result.toString();
   }
 
-  /// Modified Transposition Cipher - Decrypt
+  /// Modified Transposition Cipher - Dekripsi
   static String _modifiedTranspositionDecrypt(String ciphertext, String key) {
     if (ciphertext.isEmpty) return "";
 
@@ -81,13 +82,13 @@ class EncryptionService {
 
     if (rows == 0) return "";
 
-    // Create inverse column order mapping
+    // Buat pemetaan urutan kolom invers
     List<int> inverseOrder = List.filled(columns, 0);
     for (int i = 0; i < columns; i++) {
       inverseOrder[columnOrder[i]] = i;
     }
 
-    // Read cipher into columns (in shuffled order)
+    // Baca cipher ke dalam kolom (dalam urutan acak)
     List<List<String>> matrix =
         List.generate(rows, (_) => List.filled(columns, ''));
     int idx = 0;
@@ -97,7 +98,7 @@ class EncryptionService {
       }
     }
 
-    // Read matrix row by row
+    // Baca matriks baris demi baris
     StringBuffer result = StringBuffer();
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < columns; c++) {
@@ -107,7 +108,7 @@ class EncryptionService {
 
     String withHeader = result.toString();
 
-    // Extract length header and remove padding
+    // Ekstrak header panjang dan hapus padding
     if (withHeader.length < 4) return withHeader;
     int originalLength = int.tryParse(withHeader.substring(0, 4)) ?? 0;
     if (originalLength > 0 && originalLength + 4 <= withHeader.length) {
@@ -117,17 +118,18 @@ class EncryptionService {
   }
 
   // ============================================================
-  // LAYER 2: MODIFIED RSA (Simplified for Educational Purposes)
+  // LAYER 2: MODIFIED RSA (Disederhanakan untuk Tujuan Edukasi)
   // ============================================================
-  // Uses smaller primes derived from key for demonstration
-  // Real RSA should use 2048+ bit keys
+  // Menggunakan bilangan prima lebih kecil yang diturunkan dari kunci untuk demonstrasi
+  // RSA asli harus menggunakan kunci 2048+ bit
+  // ============================================================
 
-  /// Generate RSA parameters from key
+  /// Hasilkan parameter RSA dari kunci
   static Map<String, BigInt> _generateRSAParams(String key) {
     var bytes = sha256.convert(utf8.encode(key + "rsa")).bytes;
 
-    // Use predefined small primes for demo (derived from key hash)
-    // In production, use cryptographically secure large primes
+    // Gunakan bilangan prima kecil yang telah ditentukan untuk demo (diturunkan dari hash kunci)
+    // Dalam produksi, gunakan bilangan prima besar yang aman secara kriptografi
     List<int> primes = [
       251,
       257,
@@ -171,28 +173,28 @@ class EncryptionService {
     BigInt phi = (p - BigInt.one) * (q - BigInt.one);
     BigInt e = BigInt.from(65537);
 
-    // Ensure e is coprime with phi
+    // Pastikan e relatif prima dengan phi
     if (e >= phi || phi.gcd(e) != BigInt.one) {
       e = BigInt.from(17);
     }
 
-    // Calculate d (modular multiplicative inverse)
+    // Hitung d (invers perkalian modular)
     BigInt d = e.modInverse(phi);
 
     return {'n': n, 'e': e, 'd': d, 'p': p, 'q': q};
   }
 
-  /// RSA Encrypt a single integer
+  /// RSA Enkripsi satu integer
   static BigInt _rsaEncryptInt(BigInt m, BigInt e, BigInt n) {
     return m.modPow(e, n);
   }
 
-  /// RSA Decrypt a single integer
+  /// RSA Dekripsi satu integer
   static BigInt _rsaDecryptInt(BigInt c, BigInt d, BigInt n) {
     return c.modPow(d, n);
   }
 
-  /// Modified RSA - Encrypt bytes
+  /// Modified RSA - Enkripsi byte
   static String _modifiedRSAEncrypt(String input, String key) {
     if (input.isEmpty) return "";
 
@@ -200,7 +202,7 @@ class EncryptionService {
     BigInt n = params['n']!;
     BigInt e = params['e']!;
 
-    // Encrypt each byte individually (block size = 1 byte for demo)
+    // Enkripsi setiap byte secara individual (ukuran blok = 1 byte untuk demo)
     List<String> encryptedBlocks = [];
     for (int i = 0; i < input.length; i++) {
       int charCode = input.codeUnitAt(i);
@@ -212,7 +214,7 @@ class EncryptionService {
     return encryptedBlocks.join(',');
   }
 
-  /// Modified RSA - Decrypt
+  /// Modified RSA - Dekripsi
   static String _modifiedRSADecrypt(String encrypted, String key) {
     if (encrypted.isEmpty) return "";
 
@@ -234,10 +236,10 @@ class EncryptionService {
   }
 
   // ============================================================
-  // SUPER ENCRYPTION: Combined Layers
+  // SUPER ENCRYPTION: Gabungan Layer
   // ============================================================
 
-  /// Encrypt text data using Modified Transposition + Modified RSA
+  /// Enkripsi data teks menggunakan Modified Transposition + Modified RSA
   static String encryptData(String plainText, String secretKey) {
     if (plainText.isEmpty) return "";
 
@@ -248,7 +250,7 @@ class EncryptionService {
       // Layer 2: Modified RSA
       String layer2 = _modifiedRSAEncrypt(layer1, secretKey);
 
-      // Encode as Base64 for safe storage
+      // Encode sebagai Base64 untuk penyimpanan aman
       return base64Encode(utf8.encode(layer2));
     } catch (e) {
       print("Encryption Error: $e");
@@ -256,7 +258,7 @@ class EncryptionService {
     }
   }
 
-  /// Decrypt text data
+  /// Dekripsi data teks
   static String decryptData(String encryptedData, String secretKey) {
     if (encryptedData.isEmpty) return "";
 
@@ -264,10 +266,10 @@ class EncryptionService {
       // Decode Base64
       String layer2 = utf8.decode(base64Decode(encryptedData));
 
-      // Decrypt Layer 2: Modified RSA
+      // Dekripsi Layer 2: Modified RSA
       String layer1 = _modifiedRSADecrypt(layer2, secretKey);
 
-      // Decrypt Layer 1: Modified Transposition
+      // Dekripsi Layer 1: Modified Transposition
       return _modifiedTranspositionDecrypt(layer1, secretKey);
     } catch (e) {
       print("Decryption Error: $e");
@@ -276,54 +278,54 @@ class EncryptionService {
   }
 
   // ============================================================
-  // IMAGE ENCRYPTION (Pixel Shuffling - Preserves Image Format)
-  // Using 'image' package for reliable cross-platform support
+  // ENKRIPSI GAMBAR (Pengacakan Pixel - Mempertahankan Format Gambar)
+  // Menggunakan paket 'image' untuk dukungan lintas platform yang andal
   // ============================================================
 
-  /// Encrypt image - output is still a valid image with scrambled pixels
-  /// Uses XOR on pixel values to scramble colors
-  /// Input: Raw image bytes (PNG/JPEG)
-  /// Output: Encrypted PNG bytes (scrambled but valid image)
+  /// Enkripsi gambar - output tetap gambar valid dengan pixel acak
+  /// Menggunakan XOR pada nilai pixel untuk mengacak warna
+  /// Input: Byte gambar mentah (PNG/JPEG)
+  /// Output: Byte PNG terenkripsi (acak tapi gambar valid)
   static Future<Uint8List> encryptImage(
       Uint8List imageBytes, String secretKey) async {
     if (imageBytes.isEmpty) return Uint8List(0);
 
     try {
-      // Decode image using image package
+      // Decode gambar menggunakan paket image
       img.Image? image = img.decodeImage(imageBytes);
       if (image == null) return Uint8List(0);
 
       int width = image.width;
       int height = image.height;
 
-      // Generate key stream for XOR
+      // Hasilkan stream kunci untuk XOR
       var keyBytes = sha256.convert(utf8.encode(secretKey + "imgkey")).bytes;
 
-      // Create new image with scrambled pixels
+      // Buat gambar baru dengan pixel acak
       img.Image encryptedImage = img.Image(width: width, height: height);
 
       for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
           img.Pixel pixel = image.getPixel(x, y);
 
-          // Get pixel color components
+          // Dapatkan komponen warna pixel
           int r = pixel.r.toInt();
           int g = pixel.g.toInt();
           int b = pixel.b.toInt();
           int a = pixel.a.toInt();
 
-          // XOR RGB with key-derived values (keep alpha intact)
+          // XOR RGB dengan nilai turunan kunci (biarkan alpha utuh)
           int idx = (y * width + x) * 3;
           int newR = r ^ keyBytes[idx % keyBytes.length];
           int newG = g ^ keyBytes[(idx + 1) % keyBytes.length];
           int newB = b ^ keyBytes[(idx + 2) % keyBytes.length];
 
-          // Set scrambled pixel
+          // Set pixel acak
           encryptedImage.setPixelRgba(x, y, newR, newG, newB, a);
         }
       }
 
-      // Encode back to PNG
+      // Encode kembali ke PNG
       Uint8List result = Uint8List.fromList(img.encodePng(encryptedImage));
       return result;
     } catch (e) {
@@ -332,23 +334,23 @@ class EncryptionService {
     }
   }
 
-  /// Decrypt image - restore original from scrambled image
+  /// Dekripsi gambar - kembalikan asli dari gambar acak
   static Future<Uint8List> decryptImage(
       Uint8List encryptedBytes, String secretKey) async {
     if (encryptedBytes.isEmpty) return Uint8List(0);
 
     try {
-      // Decode encrypted image
+      // Decode gambar terenkripsi
       img.Image? image = img.decodeImage(encryptedBytes);
       if (image == null) return Uint8List(0);
 
       int width = image.width;
       int height = image.height;
 
-      // Generate same key stream
+      // Hasilkan stream kunci yang sama
       var keyBytes = sha256.convert(utf8.encode(secretKey + "imgkey")).bytes;
 
-      // Create decrypted image
+      // Buat gambar terdekripsi
       img.Image decryptedImage = img.Image(width: width, height: height);
 
       for (int y = 0; y < height; y++) {
@@ -360,7 +362,7 @@ class EncryptionService {
           int b = pixel.b.toInt();
           int a = pixel.a.toInt();
 
-          // XOR again to reverse (XOR is symmetric)
+          // XOR lagi untuk membalikkan (XOR bersifat simetris)
           int idx = (y * width + x) * 3;
           int origR = r ^ keyBytes[idx % keyBytes.length];
           int origG = g ^ keyBytes[(idx + 1) % keyBytes.length];
@@ -380,14 +382,14 @@ class EncryptionService {
   }
 
   // ============================================================
-  // LEGACY BINARY ENCRYPTION (For Non-Image Files)
+  // ENKRIPSI BINER LEGACY (Untuk File Non-Gambar)
   // ============================================================
 
-  /// Encrypt binary data using XOR with key-derived stream
+  /// Enkripsi data biner menggunakan XOR dengan stream turunan kunci
   static Uint8List encryptBinary(Uint8List data, String secretKey) {
     if (data.isEmpty) return Uint8List(0);
 
-    // Generate key stream
+    // Hasilkan stream kunci
     var keyBytes = sha256.convert(utf8.encode(secretKey)).bytes;
     Uint8List result = Uint8List(data.length);
 
@@ -398,8 +400,8 @@ class EncryptionService {
     return result;
   }
 
-  /// Decrypt binary data (XOR is symmetric)
+  /// Dekripsi data biner (XOR bersifat simetris)
   static Uint8List decryptBinary(Uint8List data, String secretKey) {
-    return encryptBinary(data, secretKey); // XOR is symmetric
+    return encryptBinary(data, secretKey); // XOR bersifat simetris
   }
 }
